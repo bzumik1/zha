@@ -11,6 +11,7 @@ from zhaquirks.device import CustomZigpyDevice
 from zigpy.profiles import zha
 import zigpy.profiles.zha
 from zigpy.typing import UNDEFINED
+from zigpy.zcl import ReportingConfig
 from zigpy.zcl.clusters import general, measurement, security
 from zigpy.zcl.clusters.general import OnOff
 
@@ -374,3 +375,36 @@ async def test_onoff_client_binary_sensor_on_with_timed_off(
     cluster.handle_message(hdr, [])
     await zha_gateway.async_block_till_done()
     assert entity.is_on is False
+
+
+@pytest.mark.parametrize(
+    ("device_file", "endpoint_id", "expected_max_interval"),
+    [
+        # The Aqara RTCGQ13LM only reports occupancy changes
+        ("lumi-lumi-motion-agl04-0x00000019.json", 1, 0),
+        # Other occupancy sensors keep the default periodic report
+        ("philips-sml001-0x43007401.json", 2, 900),
+    ],
+)
+async def test_aqara_motion_agl04_occupancy_reporting(
+    zha_gateway: Gateway,
+    device_file: str,
+    endpoint_id: int,
+    expected_max_interval: int,
+) -> None:
+    """The Aqara RTCGQ13LM gets occupancy reporting without periodic reports."""
+    zigpy_device = await zigpy_device_from_json(
+        zha_gateway.application_controller, f"tests/data/devices/{device_file}"
+    )
+    cluster = zigpy_device.endpoints[endpoint_id].occupancy
+    await join_zigpy_device(zha_gateway, zigpy_device)
+
+    assert len(cluster.configure_reporting_multiple.mock_calls) == 1
+    configured = cluster.configure_reporting_multiple.call_args.args[0]
+    assert configured[measurement.OccupancySensing.AttributeDefs.occupancy] == (
+        ReportingConfig(
+            min_interval=0,
+            max_interval=expected_max_interval,
+            reportable_change=1,
+        )
+    )

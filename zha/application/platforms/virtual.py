@@ -28,6 +28,7 @@ from zigpy.zcl.clusters.general import Identify, LevelControl, OnOff, Ota, Scene
 from zigpy.zcl.clusters.homeautomation import ElectricalMeasurement
 from zigpy.zcl.clusters.lighting import Color
 from zigpy.zcl.clusters.lightlink import LightLink
+from zigpy.zcl.clusters.measurement import OccupancySensing
 from zigpy.zcl.clusters.security import IasZone
 from zigpy.zcl.foundation import GENERAL_COMMANDS, CommandSchema, GeneralCommand
 
@@ -1267,6 +1268,36 @@ class SonoffS60RelaxedElectricalMeasurementReporting(VirtualEntity):
                     read_on_startup=False,
                     reporting=ReportingConfig(
                         min_interval=5, max_interval=900, reportable_change=5
+                    ),
+                    reporting_override=True,
+                ),
+            },
+        ),
+    }
+
+
+@register_entity(OccupancySensing.cluster_id)
+class AqaraMotionAgl04OccupancyReporting(VirtualEntity):
+    """Occupancy reporting without periodic reports for the Aqara RTCGQ13LM.
+
+    The sensor never reports `occupancy` as unoccupied, so a periodic report always
+    repeats "occupied". It sends that report when it wakes up for its hourly
+    heartbeat, and every one shows up as a false motion event. Only report changes.
+    """
+
+    _unique_id_suffix = "aqara_motion_agl04_occupancy_reporting"
+    _cluster_match = ClusterMatch(
+        server_clusters=frozenset({OccupancySensing.cluster_id}),
+        models=frozenset({"lumi.motion.agl04"}),
+    )
+    _server_cluster_config = {
+        OccupancySensing.cluster_id: ClusterConfig(
+            bind=True,
+            attributes={
+                OccupancySensing.AttributeDefs.occupancy: AttrConfig(
+                    read_on_startup=False,
+                    reporting=ReportingConfig(
+                        min_interval=0, max_interval=0, reportable_change=1
                     ),
                     reporting_override=True,
                 ),
